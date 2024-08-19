@@ -1,5 +1,5 @@
 rm(list=ls())
-version = "v2"
+version = "v3"
 
 # Q - How do multiple variables (early and late life)
 # associate with variance in intercept versus change of brain and cognition across the lifespan? 
@@ -8,7 +8,7 @@ version = "v2"
 #===cohort inputs=========================================================================
 
 #--- load FreeSurfer data with variables linked
-# DF = fread("path/to/FSdata.csv")
+DF = fread("path/to/FSdata.csv")
 #---
 
 #--- var of interest
@@ -31,8 +31,14 @@ varICV = "estimatedtotalintracranialvol" # ICV var
 
 # optional inputs
 correct_for_scanner = TRUE
-varScanner = "mri_site_name" # scanner var
+if (correct_for_scanner) {
+  varScanner = "mri_site_name" # scanner var
+}
 
+add_covariates = FALSE
+if (add_covariates) {
+  cohort_specific_covariates = c("") # add these if in data
+}
 #===cohort inputs=========================================================================
 
 
@@ -46,43 +52,78 @@ loadPackages = function() {
   sapply(packages, require, character.only = T)
 }
 loadPackages()
-setwd("/Users/jamesroe/LCBC/Users/jamesroe/interSlope/interSlope")
 here()
+analysis = "X-GCA_Y-Hippo"
+
+
+# covariate specification -----
+if (correct_for_scanner) {
+  
+  # main analysis (scanner)
+  covariates = c("sex" , "scanner")
+  covariatesICV = c("sex" , "scanner", "icv")
+  
+  # scanner precorrected analysis
+  covariates_cor = c("sex")
+  covariatesICV_cor = c("sex" , "icv")
+  
+  if (add_covariates && cohort_specific_covariates != "") {
+    covariates = c(covariates, cohort_specific_covariates)
+    covariatesICV = c(covariatesICV, cohort_specific_covariates)
+    covariates_cor = c(covariates_cor, cohort_specific_covariates)
+    covariatesICV_cor = c(covariatesICV_cor, cohort_specific_covariates)
+  }
+} else {
+  
+  # main analysis (no scanner)
+  covariates = c("sex")
+  covariatesICV = c("sex", "icv")
+  
+  # scanner precorrected analysis
+  covariates_cor = covariates
+  covariatesICV_cor = covariatesICV
+  
+  if (add_covariates && cohort_specific_covariates != "") {
+    covariates = c(covariates, cohort_specific_covariates)
+    covariatesICV = c(covariatesICV, cohort_specific_covariates)
+    covariates_cor = c(covariates_cor, cohort_specific_covariates)
+    covariatesICV_cor = c(covariatesICV_cor, cohort_specific_covariates)
+  }
+}
+
 
 
 #---testing
 # runAll = 1; if (runAll == 1) {
-cohort = "LCBC"
+# cohort = "LCBC"
 # cohort = "BACS"
-if (cohort == "LCBC") {
-  load(here("data/LCBC/DF_LCBC_noas.Rda"))
-  load(here("data/LCBC/test_LCBC.Rda"))
-  varObsID = "mri_info_folder"
-  varSubID = "subject_id"
-  varBrainL = "mri_aseg_volume_left_hippocampus"
-  varBrainR = "mri_aseg_volume_right_hippocampus"
-  varSex = "subject_sex"
-  varAge = "visit_age"
-  varEdu = "edu_years"
-  varICV = "mri_aseg_volume_estimatedtotalintracranialvol"
-  varScanner = "mri_site_name"
-} else if (cohort == "BACS") {
-  VAR = "em_cfa"
-  load(here("data/BACS/test_BACS.Rda"))
-  DF$sex[DF$sex == "M"] = "Male"
-  varObsID = "imageLink"
-  varSubID = "BACSID"
-  varBrainL = "vol.Left.Hippocampus"
-  varBrainR = "vol.Right.Hippocampus"
-  varSex = "sex"
-  varAge = "age_at_visit"
-  varEdu = "age_at_visit"
-  varICV = "vol.EstimatedTotalIntraCranialVol"
-  varScanner = "scanner_var"
-}
+# if (cohort == "LCBC") {
+#   load(("/Users/jamesroe/LCBC/Users/jamesroe/interSlope/data/LCBC/DF_LCBC_noas.Rda"))
+#   load(("/Users/jamesroe/LCBC/Users/jamesroe/interSlope/data/LCBC/test_LCBC.Rda"))
+#   varObsID = "mri_info_folder"
+#   varSubID = "subject_id"
+#   varBrainL = "mri_aseg_volume_left_hippocampus"
+#   varBrainR = "mri_aseg_volume_right_hippocampus"
+#   varSex = "subject_sex"
+#   varAge = "visit_age"
+#   varEdu = "edu_years"
+#   varICV = "mri_aseg_volume_estimatedtotalintracranialvol"
+#   varScanner = "mri_site_name"
+# } else if (cohort == "BACS") {
+#   VAR = "em_cfa"
+#   load(("/Users/jamesroe/LCBC/Users/jamesroe/interSlope/data/BACS/test_BACS.Rda"))
+#   DF$sex[DF$sex == "M"] = "Male"
+#   varObsID = "imageLink"
+#   varSubID = "BACSID"
+#   varBrainL = "vol.Left.Hippocampus"
+#   varBrainR = "vol.Right.Hippocampus"
+#   varSex = "sex"
+#   varAge = "age_at_visit"
+#   varEdu = "age_at_visit"
+#   varICV = "vol.EstimatedTotalIntraCranialVol"
+#   varScanner = "scanner_var"
+# }
 
-
-analysis = "X-GCA_Y-Hippo"
 
 
 # harmonize vars -----
@@ -93,8 +134,10 @@ DF$brainvar = ( DF[[varBrainL]] + DF[[varBrainR]] ) / 2
 DF$sex = factor(DF[[varSex]])
 DF$age = DF[[varAge]]
 DF$edu = DF[[varEdu]]
-DF$scanner = factor(DF[[varScanner]])
 DF$icv = ( DF[[varICV]] - mean(DF[[varICV]], na.rm = T) ) / sd(DF[[varICV]], na.rm = T)
+if (correct_for_scanner) {
+  DF$scanner = factor(DF[[varScanner]])
+}
 
 
 #--- sets var of interest
@@ -256,14 +299,6 @@ if (! "VAR_Z_mean_quartile" %in% names(DF)) {
     oVAR_Z_mean_quartile = factor(DF$VAR_Z_mean_quartile, levels = c(1, 2, 3, 4), ordered = T))
 }
 
-
-if (correct_for_scanner == TRUE) {
-  covariates = c("sex" , "scanner")
-  covariatesICV = c("sex" , "scanner", "icv")
-} else {
-  covariates = c("sex")
-  covariatesICV = c("sex", "icv")
-}
 
 
 
@@ -489,29 +524,29 @@ if (correct_for_scanner == TRUE) {
 
 
 # models with brain precorrected for scanner ----
-gammf_mod2_mean_cor = as.formula(paste("brainvarcor ~ s(age, bs = \"cr\", by = fVAR_Z_mean_meansplit) + fVAR_Z_mean_meansplit + sex"))
-gammf_mod3_tert_cor = as.formula(paste("brainvarcor ~ s(age, bs = \"cr\", by = fVAR_Z_mean_tertile) + fVAR_Z_mean_tertile + sex"))
-gammf_mod4_quart_cor = as.formula(paste("brainvarcor ~ s(age, bs = \"cr\", by = fVAR_Z_mean_quartile) + fVAR_Z_mean_quartile + sex"))
-gammf_mod2_omean_cor = as.formula(paste("brainvarcor ~ fVAR_Z_mean_meansplit + s(age, bs = \"cr\") + s(age, bs = \"cr\", by = oVAR_Z_mean_meansplit) + sex"))
-gammf_mod3_otert_cor = as.formula(paste("brainvarcor ~ fVAR_Z_mean_tertile + s(age, bs = \"cr\") + s(age, bs = \"cr\", by = oVAR_Z_mean_tertile) + sex"))
-gammf_mod4_oquart_cor = as.formula(paste("brainvarcor ~ fVAR_Z_mean_quartile + s(age, bs = \"cr\") + s(age, bs = \"cr\", by = oVAR_Z_mean_quartile) + sex"))
+gammf_mod2_mean_cor = as.formula(paste("brainvarcor ~ s(age, bs = \"cr\", by = fVAR_Z_mean_meansplit) + fVAR_Z_mean_meansplit +",paste(covariates_cor, collapse = " + ")))
+gammf_mod3_tert_cor = as.formula(paste("brainvarcor ~ s(age, bs = \"cr\", by = fVAR_Z_mean_tertile) + fVAR_Z_mean_tertile + ",paste(covariates_cor, collapse = " + ")))
+gammf_mod4_quart_cor = as.formula(paste("brainvarcor ~ s(age, bs = \"cr\", by = fVAR_Z_mean_quartile) + fVAR_Z_mean_quartile +",paste(covariates_cor, collapse = " + ")))
+gammf_mod2_omean_cor = as.formula(paste("brainvarcor ~ fVAR_Z_mean_meansplit + s(age, bs = \"cr\") + s(age, bs = \"cr\", by = oVAR_Z_mean_meansplit) +",paste(covariates_cor, collapse = " + ")))
+gammf_mod3_otert_cor = as.formula(paste("brainvarcor ~ fVAR_Z_mean_tertile + s(age, bs = \"cr\") + s(age, bs = \"cr\", by = oVAR_Z_mean_tertile) +",paste(covariates_cor, collapse = " + ")))
+gammf_mod4_oquart_cor = as.formula(paste("brainvarcor ~ fVAR_Z_mean_quartile + s(age, bs = \"cr\") + s(age, bs = \"cr\", by = oVAR_Z_mean_quartile) +",paste(covariates_cor, collapse = " + ")))
 
-gammf_mod2_mean_icv_cor = as.formula(paste("brainvarcor ~ s(age, bs = \"cr\", by = fVAR_Z_mean_meansplit) + fVAR_Z_mean_meansplit + sex + icv"))
-gammf_mod3_tert_icv_cor = as.formula(paste("brainvarcor ~ s(age, bs = \"cr\", by = fVAR_Z_mean_tertile) + fVAR_Z_mean_tertile + sex + icv"))
-gammf_mod4_quart_icv_cor = as.formula(paste("brainvarcor ~ s(age, bs = \"cr\", by = fVAR_Z_mean_quartile) + fVAR_Z_mean_quartile + sex + icv"))
-gammf_mod2_omean_icv_cor = as.formula(paste("brainvarcor ~ fVAR_Z_mean_meansplit + s(age, bs = \"cr\") + s(age, bs = \"cr\", by = oVAR_Z_mean_meansplit) + sex + icv"))
-gammf_mod3_otert_icv_cor = as.formula(paste("brainvarcor ~ fVAR_Z_mean_tertile + s(age, bs = \"cr\") + s(age, bs = \"cr\", by = oVAR_Z_mean_tertile) + sex + icv"))
-gammf_mod4_oquart_icv_cor = as.formula(paste("brainvarcor ~ fVAR_Z_mean_quartile + s(age, bs = \"cr\") + s(age, bs = \"cr\", by = oVAR_Z_mean_quartile) + sex + icv"))
+gammf_mod2_mean_icv_cor = as.formula(paste("brainvarcor ~ s(age, bs = \"cr\", by = fVAR_Z_mean_meansplit) + fVAR_Z_mean_meansplit +",paste(covariatesICV_cor, collapse = " + ")))
+gammf_mod3_tert_icv_cor = as.formula(paste("brainvarcor ~ s(age, bs = \"cr\", by = fVAR_Z_mean_tertile) + fVAR_Z_mean_tertile +",paste(covariatesICV_cor, collapse = " + ")))
+gammf_mod4_quart_icv_cor = as.formula(paste("brainvarcor ~ s(age, bs = \"cr\", by = fVAR_Z_mean_quartile) + fVAR_Z_mean_quartile +",paste(covariatesICV_cor, collapse = " + ")))
+gammf_mod2_omean_icv_cor = as.formula(paste("brainvarcor ~ fVAR_Z_mean_meansplit + s(age, bs = \"cr\") + s(age, bs = \"cr\", by = oVAR_Z_mean_meansplit) +",paste(covariatesICV_cor, collapse = " + ")))
+gammf_mod3_otert_icv_cor = as.formula(paste("brainvarcor ~ fVAR_Z_mean_tertile + s(age, bs = \"cr\") + s(age, bs = \"cr\", by = oVAR_Z_mean_tertile) +",paste(covariatesICV_cor, collapse = " + ")))
+gammf_mod4_oquart_icv_cor = as.formula(paste("brainvarcor ~ fVAR_Z_mean_quartile + s(age, bs = \"cr\") + s(age, bs = \"cr\", by = oVAR_Z_mean_quartile) +",paste(covariatesICV_cor, collapse = " + ")))
 
-gammf_mod_long_cor = as.formula(paste("brainvarcor ~ VAR_Z * time_bsl + s(age_bsl, bs = \"cr\") + sex"))
-lmmf_mod_long_cor = as.formula(paste("brainvarcor ~ VAR_Z * time_bsl + age_bsl + sex"))
-gammf_mod_groupmean_cor = as.formula(paste("brainvarcor ~ VAR_Z_mean_meansplit * time_bsl + s(age_bsl, bs = \"cr\") + sex"))
-lmmf_mod_groupmean_cor = as.formula(paste("brainvarcor ~ VAR_Z_mean_meansplit * time_bsl + age_bsl + sex"))
+gammf_mod_long_cor = as.formula(paste("brainvarcor ~ VAR_Z * time_bsl + s(age_bsl, bs = \"cr\") +",paste(covariates_cor, collapse = " + ")))
+lmmf_mod_long_cor = as.formula(paste("brainvarcor ~ VAR_Z * time_bsl + age_bsl +",paste(covariates_cor, collapse = " + ")))
+gammf_mod_groupmean_cor = as.formula(paste("brainvarcor ~ VAR_Z_mean_meansplit * time_bsl + s(age_bsl, bs = \"cr\") +",paste(covariates_cor, collapse = " + ")))
+lmmf_mod_groupmean_cor = as.formula(paste("brainvarcor ~ VAR_Z_mean_meansplit * time_bsl + age_bsl +",paste(covariates_cor, collapse = " + ")))
 
-gammf_mod_long_icv_cor = as.formula(paste("brainvarcor ~ VAR_Z * time_bsl + s(age_bsl, bs = \"cr\") + sex + icv"))
-lmmf_mod_long_icv_cor = as.formula(paste("brainvarcor ~ VAR_Z * time_bsl + age_bsl + sex + icv"))
-gammf_mod_groupmean_icv_cor = as.formula(paste("brainvarcor ~ VAR_Z_mean_meansplit * time_bsl + s(age_bsl, bs = \"cr\") + sex + icv"))
-lmmf_mod_groupmean_icv_cor = as.formula(paste("brainvarcor ~ VAR_Z_mean_meansplit * time_bsl + age_bsl + sex + icv"))
+gammf_mod_long_icv_cor = as.formula(paste("brainvarcor ~ VAR_Z * time_bsl + s(age_bsl, bs = \"cr\") +",paste(covariatesICV_cor, collapse = " + ")))
+lmmf_mod_long_icv_cor = as.formula(paste("brainvarcor ~ VAR_Z * time_bsl + age_bsl +",paste(covariatesICV_cor, collapse = " + ")))
+gammf_mod_groupmean_icv_cor = as.formula(paste("brainvarcor ~ VAR_Z_mean_meansplit * time_bsl + s(age_bsl, bs = \"cr\") +",paste(covariatesICV_cor, collapse = " + ")))
+lmmf_mod_groupmean_icv_cor = as.formula(paste("brainvarcor ~ VAR_Z_mean_meansplit * time_bsl + age_bsl +",paste(covariatesICV_cor, collapse = " + ")))
 
 
 DF_long = DF %>% filter(!is.na(VAR_Z)) %>% group_by(id) %>% mutate(
@@ -765,7 +800,6 @@ timestamp_str = gsub(" ", "_", timestamp)
 timestamp_str = gsub(":", "-", timestamp_str)
 
 
-version = "v2"
 
 if (saveres == TRUE) {
   resdir = here("results", cohort)
